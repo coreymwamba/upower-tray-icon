@@ -81,8 +81,8 @@ def get_battery_info():
     # if is_plugged_in == "yes":
     #    icon_name = "ac-adapter-symbolic"
     # else:
-        icon_line = next(line for line in bat_output.splitlines() if "icon-name:" in line)
-        icon_name = icon_line.split(":")[1].strip().replace("'", "")
+    icon_line = next(line for line in bat_output.splitlines() if "icon-name:" in line)
+    icon_name = icon_line.split(":")[1].strip().replace("'", "")
 
     return percent, is_charging, icon_name
 
