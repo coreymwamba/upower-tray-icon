@@ -74,13 +74,13 @@ def get_battery_info():
     is_charging = state_line.split(":")[1].strip().replace(" ", "")
     
     # Find out if the AC is plugged in
-    ac_line = next(line for line in ac_output.splitlines() if "online" in line)
-    is_plugged_in = ac_line.split(":")[1].strip().replace(" ", "")
+    # ac_line = next(line for line in ac_output.splitlines() if "online" in line)
+    # is_plugged_in = ac_line.split(":")[1].strip().replace(" ", "")
 
     # Extract icon name
-    if is_plugged_in == "yes":
-        icon_name = "ac-adapter-symbolic"
-    else:
+    # if is_plugged_in == "yes":
+    #    icon_name = "ac-adapter-symbolic"
+    # else:
         icon_line = next(line for line in bat_output.splitlines() if "icon-name:" in line)
         icon_name = icon_line.split(":")[1].strip().replace("'", "")
 
