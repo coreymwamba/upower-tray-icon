@@ -11,6 +11,7 @@ gi.require_version('AppIndicator3', '0.1')
 from gi.repository import Gtk as gtk, AppIndicator3 as appindicator, GLib
 
 menu_is_open = False
+selected_epb = "normal"  # Default to "normal"
 
 def main():
     global indicator
@@ -25,7 +26,6 @@ def main():
     
     # Update every 10 seconds
     GLib.timeout_add_seconds(10, lambda: GLib.idle_add(update_battery_status))
-    
     gtk.main()
 
 def get_epb():
@@ -45,44 +45,26 @@ def get_epb():
         "8": "balanced powersaving",
         "15": "powersaving"
     }
-    epb_status = performance_modes.get(epb_value)
-    return epb_status
+    return performance_modes.get(epb_value)
 
 def get_battery_info():
     """Retrieve battery level, charging status, and icon name using upower."""
     battery_path = "/org/freedesktop/UPower/devices/battery_BAT0"
-    ac_path = "/org/freedesktop/UPower/devices/line_power_AC"
     # Run upower command and capture output
     bat_output = subprocess.run(
         ["upower", "-i", battery_path],
         stdout=subprocess.PIPE,
         text=True
     ).stdout
-        # Run upower command and capture output
-    ac_output = subprocess.run(
-        ["upower", "-i", ac_path],
-        stdout=subprocess.PIPE,
-        text=True
-    ).stdout
     
-    # Extract battery percentage
     percent_line = next(line for line in bat_output.splitlines() if "percentage:" in line)
     percent = int(percent_line.split(":")[1].strip().replace("%", ""))
     
-    # Extract charging state
     state_line = next(line for line in bat_output.splitlines() if "state:" in line)
     is_charging = state_line.split(":")[1].strip().replace(" ", "")
     
-    # Find out if the AC is plugged in
-    # ac_line = next(line for line in ac_output.splitlines() if "online" in line)
-    # is_plugged_in = ac_line.split(":")[1].strip().replace(" ", "")
-
-    # Extract icon name
-    # if is_plugged_in == "yes":
-    #    icon_name = "ac-adapter-symbolic"
-    # else:
     icon_line = next(line for line in bat_output.splitlines() if "icon-name:" in line)
-    icon_name = icon_line.split(":")[1].strip().replace("'", "")
+    icon_name = icon_line.split(":")[1].strip().replace("'", "").replace("-symbolic","")
 
     return percent, is_charging, icon_name
 
@@ -93,60 +75,59 @@ def update_battery_status():
         return True
     
     percent, is_charging, icon_name = get_battery_info()
-    epb_name = get_epb()
-    
     # Set the indicator icon based on upower's icon-name
     indicator.set_icon(icon_name)
-    indicator.set_title(f"{percent}%, {is_charging}: {epb_name}")
+    indicator.set_title(f"{percent}%, {is_charging}: {selected_epb}")
     
     return True
+
+def generate_energy_menu():
+    energy_menu = gtk.Menu()
+    performance_modes = ["performance", "balanced performance", "normal", "balanced powersaving", "powersaving"]
+    for mode in performance_modes:
+        item = gtk.MenuItem(label=f"{'● ' if selected_epb == mode else ''}{mode}")
+        item.connect("activate", set_cpu_performance, mode)
+        energy_menu.append(item)
+    energy_menu.show_all()
+    return energy_menu
 
 def create_menu():
     """Create the tray menu."""
     menu = gtk.Menu()
     
+    energy_section = gtk.MenuItem(label="CPU Performance")
+    energy_section.set_submenu(generate_energy_menu())
+    menu.append(energy_section)
+
     # Exit option
     exit_item = gtk.MenuItem(label="Exit")
     exit_item.connect('activate', quit)
-    energy_menu = gtk.Menu()
-    energy_section = gtk.MenuItem(label="CPU Performance")
-    energy_section.set_submenu(energy_menu)
-    
-    for mode in ["performance", "balance-performance", "normal", "balance-power", "power"]:
-        mode_label = mode.replace("balance-", "balanced ").replace("power", "powersaving")
-        item = gtk.MenuItem(label=mode_label)
-        epb_status = get_epb()
-        if mode_label == epb_status:
-            item.set_label(f"● {mode_label}")
-        item.connect("activate", set_cpu_performance, mode)
-        energy_menu.append(item)
-
-    menu.append(energy_section)
     menu.append(exit_item)
+
     menu.connect("show", on_menu_open)
     menu.connect("hide", on_menu_close)
     menu.show_all()
     return menu
 
 def set_cpu_performance(_, mode):
-    # Dictionary for mapping performance modes to EPB values
+    global selected_epb
+    # Map performance modes to EPB values
     performance_modes = {
         "performance": 0,
-        "balance-performance": 4,
+        "balanced performance": 4,
         "normal": 6,
-        "balance-power": 8,
-        "power": 15
+        "balanced powersaving": 8,
+        "powersaving": 15
     }
-    # Get the EPB value from the dictionary, defaulting to "normal" (6) if mode is unknown
     epb_value = performance_modes.get(mode, 6)
-    
-    # Execute the cpupower command to set the EPB value
+
     try:
         subprocess.run(["sudo", "cpupower", "set", "-b", str(epb_value)], check=True)
-        print(f"Set CPU energy performance mode to {mode} (EPB value {epb_value})")
+        selected_epb = mode  # Update the selected mode
+        # Refresh the energy menu to show the new selection
+        indicator.set_menu(create_menu())
     except subprocess.CalledProcessError as e:
         print(f"Error setting CPU mode: {e}")
-
 
 def on_menu_open(_menu):
     global menu_is_open
